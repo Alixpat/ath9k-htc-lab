@@ -158,6 +158,7 @@ struct wmi {
 	u8 *cmd_rsp_buf;
 	u32 cmd_rsp_len;
 	bool stopped;
+	u8 lab_timeouts;	/* délais dépassés consécutifs (labo) */
 
 	struct list_head pending_tx_events;
 	spinlock_t event_lock;

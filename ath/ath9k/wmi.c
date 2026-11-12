@@ -305,6 +305,8 @@ static int ath9k_wmi_cmd_issue(struct wmi *wmi,
 	return htc_send_epid(wmi->htc, skb, wmi->ctrl_epid);
 }
 
+#define ATH9K_WMI_LAB_MAX_TIMEOUTS	4
+
 int ath9k_wmi_cmd(struct wmi *wmi, enum wmi_cmd_id cmd_id,
 		  u8 *cmd_buf, u32 cmd_len,
 		  u8 *rsp_buf, u32 rsp_len,
@@ -350,10 +352,23 @@ int ath9k_wmi_cmd(struct wmi *wmi, enum wmi_cmd_id cmd_id,
 		spin_lock_irqsave(&wmi->wmi_lock, flags);
 		wmi->last_seq_id = 0;
 		spin_unlock_irqrestore(&wmi->wmi_lock, flags);
+		/*
+		 * Labo : après plusieurs délais dépassés d'affilée, la clé est
+		 * considérée comme muette et les commandes suivantes échouent
+		 * tout de suite. Sinon l'arrêt de l'interface enchaîne des
+		 * centaines de commandes d'une seconde en gardant le verrou
+		 * rtnl, ce qui fige les commandes réseau et sudo.
+		 */
+		if (++wmi->lab_timeouts >= ATH9K_WMI_LAB_MAX_TIMEOUTS && !wmi->stopped) {
+			wmi->stopped = true;
+			dev_err(wmi->drv_priv->dev,
+				"ath9k_htc: la clé ne répond plus, commandes abandonnées (la rebrancher)\n");
+		}
 		mutex_unlock(&wmi->op_mutex);
 		return -ETIMEDOUT;
 	}
 
+	wmi->lab_timeouts = 0;
 	mutex_unlock(&wmi->op_mutex);
 
 	return 0;

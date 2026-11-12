@@ -21,6 +21,11 @@ echo 0x9800 | sudo tee /sys/class/ieee80211/phy0/regidx
 sudo cat /sys/class/ieee80211/phy0/regval
 ```
 
+Second ajout : après quatre commandes restées sans réponse d'affilée, le pilote considère la clé comme
+muette et fait échouer tout de suite les commandes suivantes (message dans `dmesg`). Sans cela, l'arrêt
+de l'interface d'une clé figée garde le verrou réseau du noyau pendant des dizaines de minutes, ce qui
+bloque `sudo` et les commandes réseau.
+
 Pourquoi sysfs et non debugfs : avec Secure Boot, le noyau interdit d'ouvrir en écriture les fichiers
 debugfs, même en root.
 
