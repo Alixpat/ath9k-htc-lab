@@ -474,8 +474,67 @@ void ath9k_htc_get_et_stats(struct ieee80211_hw *hw,
 	WARN_ON(i != ATH9K_HTC_SSTATS_LEN);
 }
 
+/*
+ * Accès direct aux registres (labo), par sysfs : /sys/class/ieee80211/phyN/regidx
+ * et regval. debugfs en écriture est bloqué par le verrouillage du noyau (Secure Boot).
+ */
+static struct ath9k_htc_priv *lab_dev_to_priv(struct device *dev)
+{
+	struct wiphy *wiphy = container_of(dev, struct wiphy, dev);
+
+	return wiphy_to_ieee80211_hw(wiphy)->priv;
+}
+
+static ssize_t regidx_show(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	return sprintf(buf, "0x%08x\n", lab_dev_to_priv(dev)->debug.regidx);
+}
+
+static ssize_t regidx_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	unsigned long v;
+
+	if (kstrtoul(buf, 0, &v))
+		return -EINVAL;
+	lab_dev_to_priv(dev)->debug.regidx = v;
+	return count;
+}
+
+static ssize_t regval_show(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	struct ath9k_htc_priv *priv = lab_dev_to_priv(dev);
+	u32 v;
+
+	ath9k_htc_ps_wakeup(priv);
+	v = REG_READ(priv->ah, priv->debug.regidx);
+	ath9k_htc_ps_restore(priv);
+	return sprintf(buf, "0x%08x\n", v);
+}
+
+static ssize_t regval_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct ath9k_htc_priv *priv = lab_dev_to_priv(dev);
+	unsigned long v;
+
+	if (kstrtoul(buf, 0, &v))
+		return -EINVAL;
+	ath9k_htc_ps_wakeup(priv);
+	REG_WRITE(priv->ah, priv->debug.regidx, v);
+	ath9k_htc_ps_restore(priv);
+	return count;
+}
+
+static DEVICE_ATTR_ADMIN_RW(regidx);
+static DEVICE_ATTR_ADMIN_RW(regval);
+
 void ath9k_htc_deinit_debug(struct ath9k_htc_priv *priv)
 {
+	device_remove_file(&priv->hw->wiphy->dev, &dev_attr_regidx);
+	device_remove_file(&priv->hw->wiphy->dev, &dev_attr_regval);
 	ath9k_cmn_spectral_deinit_debug(&priv->spec_priv);
 }
 
@@ -511,6 +570,9 @@ int ath9k_htc_init_debug(struct ath_hw *ah)
 			    priv, &fops_queue);
 	debugfs_create_file("debug", 0600, priv->debug.debugfs_phy,
 			    priv, &fops_debug);
+	if (device_create_file(&priv->hw->wiphy->dev, &dev_attr_regidx) ||
+	    device_create_file(&priv->hw->wiphy->dev, &dev_attr_regval))
+		dev_warn(priv->dev, "regidx/regval indisponibles\n");
 
 	ath9k_cmn_debug_base_eeprom(priv->debug.debugfs_phy, priv->ah);
 	ath9k_cmn_debug_modal_eeprom(priv->debug.debugfs_phy, priv->ah);

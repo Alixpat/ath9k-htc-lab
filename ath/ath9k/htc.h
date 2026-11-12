@@ -366,6 +366,7 @@ struct ath9k_debug {
 	struct ath_tx_stats tx_stats;
 	struct ath_rx_stats rx_stats;
 	struct ath_skbrx_stats skbrx_stats;
+	u32 regidx;
 };
 
 void ath9k_htc_get_et_strings(struct ieee80211_hw *hw,
